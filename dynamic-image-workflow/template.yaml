@@ -1,0 +1,16 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: parameterized-image-template
+  namespace: argo
+spec:
+  templates:
+    - name: run-container
+      inputs:
+        parameters:
+          - name: image
+            default: busybox # Optional default value
+      container:
+        image: "{{inputs.parameters.image}}" # Dynamically set image name
+        command: [echo]
+        args: ["Running container with {{inputs.parameters.image}} image"]

@@ -1,0 +1,31 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: dynamic-image-workflow-
+  namespace: argo
+spec:
+  entrypoint: main
+  templates:
+    - name: main
+      dag:
+        tasks:
+          - name: run-busybox
+            templateRef:
+              name: parameterized-image-template
+              template: run-container
+          - name: run-alpine
+            templateRef:
+              name: parameterized-image-template # Reference the WorkflowTemplate
+              template: run-container
+            arguments:
+              parameters:
+                - name: image
+                  value: alpine # Pass a specific image name (e.g., alpine)
+          - name: run-debian
+            templateRef:
+              name: parameterized-image-template
+              template: run-container
+            arguments:
+              parameters:
+                - name: image
+                  value: debian:bullseye-slim
