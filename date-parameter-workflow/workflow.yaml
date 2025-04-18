@@ -1,0 +1,19 @@
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: cronworkflow-with-date-params
+  namespace: argo
+spec:
+  schedule: "0 2 * * *"  # Runs daily at 2 AM
+  concurrencyPolicy: "Replace"
+  startingDeadlineSeconds: 0
+  workflowSpec:
+    entrypoint: date-params-dag
+    arguments:
+      parameters:
+        - name: start_date
+          value: '{{=sprig.date("2006-01-02", sprig.dateModify("-24h", sprig.now()))}}'
+        - name: end_date
+          value: '{{=sprig.date("2006-01-02", sprig.now())}}'
+    workflowTemplateRef:
+      name: date-params-dag-template

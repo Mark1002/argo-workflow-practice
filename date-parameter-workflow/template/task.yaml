@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: print-dates-template
+  namespace: argo
+spec:
+  templates:
+    - name: print-dates
+      inputs:
+        parameters:
+          - name: start_date
+          - name: end_date
+          - name: message
+      container:
+        image: alpine:3.18
+        command: [sh, -c]
+        args:
+          - |
+            echo "Message: {{inputs.parameters.message}}"
+            echo "Start Date: {{inputs.parameters.start_date}}"
+            echo "End Date: {{inputs.parameters.end_date}}"

@@ -1,0 +1,53 @@
+# This version will create jobs as fast as it can - not waiting for
+# each to complete. Use this when you really need each workflow separate.
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  name: backfill-v1
+  namespace: argo
+spec:
+  entrypoint: main
+  # the backfill must use a service account which can create workflows
+  # you should not - despite this example - use "argo-server"
+  serviceAccountName: argo-server
+  templates:
+    - name: main
+      steps:
+        - - name: day
+            template: create-job
+            arguments:
+              parameters:
+                - name: date
+                  value: "{{item}}"
+            withSequence:
+              # run for the 19th to the 21st
+              start: "19"
+              end: "21"
+              format: "2020-05-%02X"
+    - # this template creates each workflow
+      name: create-job
+      inputs:
+        parameters:
+          - name: date
+      resource:
+        action: apply
+        manifest: |
+          apiVersion: argoproj.io/v1alpha1
+          kind: Workflow
+          metadata:
+            # using a name based on the date prevents re-creating resources,
+            # making this more robust
+            name: job-{{inputs.parameters.date}}
+          spec:
+            entrypoint: main
+            templates:
+              - name: main
+                steps:
+                  - - name: start-job
+                      arguments:
+                        parameters:
+                          - name: date
+                            value: "{{inputs.parameters.date}}"
+                      templateRef:
+                        name: job
+                        template: main

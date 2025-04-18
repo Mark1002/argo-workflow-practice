@@ -1,0 +1,40 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: date-params-dag-template
+  namespace: argo
+spec:
+  entrypoint: date-params-dag
+  templates:
+  - name: date-params-dag
+    inputs:
+      parameters:
+        - name: start_date
+        - name: end_date
+    dag:
+      tasks:
+        - name: print-dates-1
+          templateRef:
+            name: print-dates-template
+            template: print-dates
+          arguments:
+            parameters:
+              - name: start_date
+                value: '{{inputs.parameters.start_date}}'
+              - name: end_date
+                value: '{{inputs.parameters.end_date}}'
+              - name: message
+                value: 'task 1'
+        - name: print-dates-2
+          templateRef:
+            name: print-dates-template
+            template: print-dates
+          dependencies: [print-dates-1]
+          arguments:
+            parameters:
+              - name: start_date
+                value: '{{inputs.parameters.start_date}}'
+              - name: end_date
+                value: '{{inputs.parameters.end_date}}'
+              - name: message
+                value: 'task 2'
