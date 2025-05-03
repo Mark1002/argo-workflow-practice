@@ -1,0 +1,79 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: dag-test
+  namespace: argo
+  labels:
+    env: prod
+    jobenv: prod
+    template: datalake
+spec:
+  entrypoint: dag-test
+  parallelism: 2
+  templates:
+  - name: dag-test
+    inputs:
+        parameters:
+          - name: start-dt
+            value: "2025-04-20"
+          - name: end-dt
+            value: "2025-05-01"
+    dag:
+      tasks:
+      - name: date-generator
+        template: date-generator
+        arguments:
+          parameters:
+            - name: start-dt
+              value: "{{inputs.parameters.start-dt}}"
+            - name: end-dt
+              value: "{{inputs.parameters.end-dt}}"
+      - name: data-processing
+        depends: "date-generator"
+        template: print-message
+        arguments:
+          parameters:
+          - {name: message, value: "{{item.partition}}"}
+        withParam: "{{tasks.date-generator.outputs.parameters.generated_dates}}"
+      - name: processing-done
+        depends: "data-processing"
+        template: print-message
+        arguments:
+          parameters:
+          - {name: message, value: done}
+
+  - name: date-generator
+    inputs:
+      parameters:
+        - name: start-dt
+        - name: end-dt
+    script:
+      image: python:3.11-alpine
+      command: [python]
+      source: |
+        import json
+        import sys
+        from datetime import datetime,timedelta
+
+        startDt = datetime.strptime("{{inputs.parameters.start-dt}}","%Y-%m-%d")
+        endDt = datetime.strptime("{{inputs.parameters.end-dt}}","%Y-%m-%d") 
+        delta = (endDt - startDt).days
+        with open("generated_dates.json", "w") as out_file:
+            json.dump([{"partition": (startDt + timedelta(days=i)).strftime('%Y-%m-%d')} for i in range(delta+1)],out_file)     
+        out_file.close() 
+    outputs:
+      parameters:
+        - name: generated_dates
+          valueFrom:
+            default: '[{"partition": "2023-12-20"}]'
+            path: generated_dates.json
+          globalName: generated_dates      
+
+  - name: print-message
+    inputs:
+      parameters:
+      - name: message
+    container:
+      image: alpine:3.18
+      command: [echo]
+      args: ["execute_date: {{inputs.parameters.message}}"]
