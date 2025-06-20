@@ -1,14 +1,11 @@
-import os
-from hera.workflows import Steps, DAG, Workflow, WorkflowsService, script
-
-from hera_example.utils import argo_lint_from_yaml
-
-ARGO_SERVER = os.getenv("ARGO_SERVER", "http://localhost:2746")
-ARGO_TOKEN = os.getenv("ARGO_TOKEN")
+from hera.workflows import (
+    CronWorkflow, Steps, DAG, WorkflowTemplate, script
+)
+from hera.workflows.models import WorkflowTemplateRef
 
 
 @script(image="python:3.11-alpine")
-def echo(message: str):
+def task(message: str):
     if message == "C":
         raise ValueError("Simulating a failure in task C")
     print(message)
@@ -19,29 +16,31 @@ def notify():
     print("Exiting workflow and sending notification.")
 
 
-with Workflow(
-    generate_name="hello-world-",
+cron_workflow = CronWorkflow(
+    name="hello-world-etl",
+    on_exit="exit-handler",
     entrypoint="hello-dag",
-    namespace="argo",
-    workflows_service=WorkflowsService(host=ARGO_SERVER, token=ARGO_TOKEN)
-) as w:
+    schedule="*/2 * * * *",
+    workflow_template_ref=WorkflowTemplateRef(name="hello-world-dag-template")
+)
+# Create a workflow template with the DAG definition
+with WorkflowTemplate(
+    name="hello-world-dag-template",
+    entrypoint="hello-dag",
+) as workflow_template:
     with Steps(name="exit-handler") as exit_handler:
-        notify(name="exit-handler", when="{{workflow.status}} != Succeeded")
-
-    with DAG(name="hello-dag") as hello_dag:
-        A = echo(name="A", arguments={"message": "A"})
-        B = echo(name="B", arguments={"message": "B"})
-        C = echo(name="C", arguments={"message": "C"})
-        D = echo(name="D", arguments={"message": "D"})
-
+        notify(
+            name="exit-handler",
+            when="{{workflow.status}} != Succeeded"
+        )
+    with DAG(name="hello-dag"):
+        A = task(name="A", arguments={"message": "A"})
+        B = task(name="B", arguments={"message": "B"})
+        C = task(name="C", arguments={"message": "C"})
+        D = task(name="D", arguments={"message": "D"})
         A >> [B, C] >> D
-
-    w.on_exit = exit_handler
-
-# Compile Hera python code to Argo Workflow yaml
-yaml = w.to_yaml()
-print(yaml)
-argo_lint_from_yaml(yaml)
-# Create the workflow in the Argo server
-submitted_workflow = w.create()
-print(f"Workflow at {ARGO_SERVER}/workflows/argo/{submitted_workflow.metadata.name}") # noqa
+    workflow_template.on_exit = exit_handler
+    # Compile to workflowtemplate YAML and submit to argo workflow
+    workflow_template.create()
+# Compile the CronWorkflow that references the WorkflowTemplate
+cron_workflow.create()
