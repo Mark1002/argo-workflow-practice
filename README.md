@@ -16,5 +16,5 @@ $ uv pip install hera
 
 2. Submit Hera dag python file
 ```python
-$ python -m hera-example.hello_world_dag
+$ python -m hera_example.hello_world_dag
 ```
