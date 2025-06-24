@@ -3,6 +3,8 @@ from hera.workflows import (
 )
 from hera.workflows.models import WorkflowTemplateRef
 
+from hera_example.service import WorkflowService
+
 
 @script(image="python:3.11-alpine")
 def task(message: str):
@@ -21,7 +23,8 @@ cron_workflow = CronWorkflow(
     on_exit="exit-handler",
     entrypoint="hello-dag",
     schedule="*/2 * * * *",
-    workflow_template_ref=WorkflowTemplateRef(name="hello-world-dag-template")
+    workflow_template_ref=WorkflowTemplateRef(name="hello-world-dag-template"),
+    workflows_service=WorkflowService()
 )
 # Create a workflow template with the DAG definition
 with WorkflowTemplate(
