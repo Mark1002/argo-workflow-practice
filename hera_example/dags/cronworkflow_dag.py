@@ -24,4 +24,5 @@ with CronWorkflow(
     with DAG(name="dag"):
         a, b, c = task_a(), task_b(), task_c()
         a >> [b, c]
-    cw.create()
+    # cw.create()
+    print(cw.to_yaml())

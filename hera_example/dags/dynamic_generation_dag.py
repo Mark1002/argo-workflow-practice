@@ -1,5 +1,5 @@
 from hera.workflows import (
-    DAG, WorkflowTemplate, script, CronWorkflow, Steps
+    DAG, WorkflowTemplate, script, CronWorkflow, Steps, Parameter
 )
 from hera.workflows.models import WorkflowTemplateRef
 
@@ -59,6 +59,24 @@ with WorkflowTemplate(
             when="{{workflow.status}} != Succeeded"
         )
     with DAG(
+        name="task-dag",
+        inputs=Parameter(name="execute_date")
+    ) as inner_dag:
+        execute_date = inner_dag.get_parameter('execute_date')
+        t1 = print_message(
+            name="inner-task-1",
+            arguments={
+                "message": f"task1 at: {execute_date}"
+            }
+        )
+        t2 = print_message(
+            name="inner-task-2",
+            arguments={
+                "message": f"task2 at: {execute_date}"
+            }
+        )
+        t1 >> t2
+    with DAG(
         name="dynamic-dag",
         inputs=[
             {"start_date": "2025-01-01"},
@@ -72,10 +90,10 @@ with WorkflowTemplate(
                 "end_date": dag.get_parameter("end_date")
             }
         )
-        t2 = print_message(
+        t2 = inner_dag(
             name="daily-task",
             with_param=t1.result,
-            arguments={"message": "{{item.execute_date}}"}
+            arguments={"execute_date": "{{item.execute_date}}"}
         )
         t3 = print_message(
             name="final-task",
@@ -83,5 +101,5 @@ with WorkflowTemplate(
         )
         t1 >> t2 >> t3
         w.on_exit = exit_handler
-        w.create()
+        w.update()
 cw.create()
