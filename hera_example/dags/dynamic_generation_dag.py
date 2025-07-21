@@ -75,7 +75,7 @@ with WorkflowTemplate(
                 "message": f"task2 at: {execute_date}"
             }
         )
-        t1 >> t2
+        t1 >> t2  # type: ignore
     with DAG(
         name="dynamic-dag",
         inputs=[
@@ -99,7 +99,7 @@ with WorkflowTemplate(
             name="final-task",
             arguments={"message": "All tasks completed successfully!"}
         )
-        t1 >> t2 >> t3
+        t1 >> t2 >> t3  # type: ignore
         w.on_exit = exit_handler
         w.update()
 cw.create()
