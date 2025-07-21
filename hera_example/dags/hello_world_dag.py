@@ -37,16 +37,16 @@ with WorkflowTemplate(
             when="{{workflow.status}} != Succeeded"
         )
     with DAG(name="hello-dag"):
-        A = task(name="A")
+        A = task(name="A", arguments={"message": "A"})
         B = task(name="B", arguments={"message": "B"})
         C = task(name="C", arguments={"message": "C"})
         D = task(name="D", arguments={"message": "D"})
-        A >> [B, C] >> D
+        A >> [B, C] >> D  # type: ignore
     workflow_template.on_exit = exit_handler
     # Compile to workflowtemplate YAML and submit to argo workflow
     print(workflow_template.to_yaml())
     workflow_template.lint()
-    workflow_template.create()
+    workflow_template.update()
 # Compile the CronWorkflow that references the WorkflowTemplate
 cron_workflow.lint()
-cron_workflow.create()
+cron_workflow.update()

@@ -40,7 +40,9 @@ with WorkflowTemplate(
         )
     with DAG(name="main-dag"):
         t1 = monitor_external_workflow(name="external-sensor", arguments={
-            "external_workflow_name": "daily-dag"
+            "cron_workflow": "daily-dag",
+            "host": "http://argo-server.argo.svc.cluster.local:2746",
+            "namespace": "argo"
         })
         t2 = task(name="end", arguments={"message": "Finish Task"})
         t1 >> t2  # type: ignore
@@ -50,5 +52,5 @@ with WorkflowTemplate(
     workflow_template.lint()
     workflow_template.update()
 # Compile the CronWorkflow that references the WorkflowTemplate
-# cron_workflow.lint()
-# cron_workflow.create()
+cron_workflow.lint()
+cron_workflow.update()
