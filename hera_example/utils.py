@@ -1,57 +1,98 @@
 import requests
+import time
+
+from typing import Optional, Tuple
+from datetime import datetime, timedelta, timezone
 from hera.workflows import script
 
 
 @script(image="argo-workflow-practice:v0.1.0")
-def monitor_external_workflow(cron_workflow: str, host: str, namespace: str):
+def monitor_external_workflow(
+    cron_workflow: str,
+    host: str,
+    namespace: str,
+    poll_interval: int,
+    wait_timeout: int,
+    allow_time_diff: int
+):
     """Monitor latest run external workflow created by CronWorkflow."""
     from hera.workflows import Workflow
     from hera_example.service import WorkflowService
-    from hera_example.utils import _get_current_running_workflow_name
+    from hera_example.utils import _get_current_running_workflow
 
-    current_workflow_name = _get_current_running_workflow_name(
-        cron_workflow_name=cron_workflow,
-        argo_server_url=host,
-        namespace=namespace
-    )
+    start_time = datetime.now(timezone.utc)
+
+    while True:
+        elapsed_time = datetime.now(timezone.utc) - start_time
+        if elapsed_time > timedelta(seconds=wait_timeout):
+            raise TimeoutError(
+                f"Timeout after {wait_timeout} seconds waiting for CronWorkflow {cron_workflow} to start a new run."
+            )
+        current_workflow_name, last_scheduled_time = _get_current_running_workflow(
+            cron_workflow_name=cron_workflow,
+            argo_server_url=host,
+            namespace=namespace
+        )
+        if current_workflow_name:
+            print(f"Found current running workflow: {current_workflow_name}")
+            break
+        if last_scheduled_time and (start_time - last_scheduled_time) <= timedelta(seconds=allow_time_diff):
+            current_workflow_name = f"{cron_workflow}-{int(last_scheduled_time.timestamp())}"
+            print(f"Found last workflow name in time range: {current_workflow_name}") # noqa
+            break
+        print(f"Waiting for CronWorkflow {cron_workflow} to start a new run...")
+        time.sleep(poll_interval)
     # Create a reference to the external workflow
     external_workflow = Workflow(
         name=current_workflow_name,
         workflows_service=WorkflowService(host=host, namespace=namespace)
     )
-    external_workflow.wait(poll_interval=30)
+    external_workflow.wait(poll_interval=poll_interval)
     print(f"External workflow {current_workflow_name} completed successfully") # noqa
 
 
-def _get_current_running_workflow_name(
+def _get_current_running_workflow(
     cron_workflow_name: str,
     argo_server_url: str,
     namespace: str = "default",
-) -> str:
-    argo_api = f"{argo_server_url}/api/v1/workflows/{namespace}/{cron_workflow_name}" # noqa
+) -> Tuple[Optional[str], Optional[datetime]]:
+    last_scheduled_time: Optional[datetime] = None
+    latest_running_wf_name: Optional[str] = None
+
+    argo_api = f"{argo_server_url}/api/v1/cron-workflows/{namespace}/{cron_workflow_name}" # noqa
 
     response = requests.get(argo_api)
+    if response.status_code == 404:
+        print(f"CronWorkflow {cron_workflow_name} not found at {argo_api}")
+        return None, None
+
     response.raise_for_status()
-    running_workflows: list[dict] = response.json()["status"]["active"]
+    workflow_status = response.json()["status"]
+    running_workflows: Optional[list[dict]] = workflow_status["active"]
+    time_str: Optional[str] = workflow_status["lastScheduledTime"]
 
-    if not running_workflows:
-        raise RuntimeError(f"No running workflows found for CronWorkflow {cron_workflow_name}") # noqa
+    if time_str:
+        last_scheduled_time = datetime.fromisoformat(
+            time_str.replace("Z", "+00:00")
+        )
 
-    # Sort running workflows by timestamp descending to get the latest
-    running_workflows.sort(
-        key=lambda w: w["name"].split("-")[-1],
-        reverse=True
-    )
+    if running_workflows:
+        # Sort running workflows by timestamp descending to get the latest
+        running_workflows.sort(
+            key=lambda w: w["name"].split("-")[-1],
+            reverse=True
+        )
+        latest_running_wf_name = running_workflows[0]["name"]
 
-    latest_running_wf_name = running_workflows[0]["name"]
-    return latest_running_wf_name
+    return latest_running_wf_name, last_scheduled_time
 
 
 if __name__ == "__main__":
-    # monitor_external_workflow(external_workflow_name="daily-dag")
-    name = _get_current_running_workflow_name(
-        cron_workflow_name="hello-world-etl",
-        argo_server_url="http://127.0.0.1:2746",
-        namespace="argo"
+    monitor_external_workflow(
+        cron_workflow="hello-world-etl",
+        host="http://127.0.0.1:2746",
+        namespace="argo",
+        poll_interval=10,
+        wait_timeout=3600,
+        allow_time_diff=300
     )
-    print(name)
