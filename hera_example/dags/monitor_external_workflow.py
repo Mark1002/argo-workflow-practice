@@ -4,12 +4,11 @@ from hera.workflows import (
 from hera.workflows.models import WorkflowTemplateRef
 
 from hera_example.service import WorkflowService
+from hera_example.utils import monitor_external_workflow
 
 
 @script(image="python:3.11-alpine")
 def task(message: str):
-    if message == "C":
-        raise ValueError("Simulating a failure in task C")
     print(message)
 
 
@@ -18,30 +17,40 @@ def notify():
     print("Exiting workflow and sending notification.")
 
 
+WORKFLOW_NAME = "monitor-external-workflow"
+WORKFLOW_NAME_TEMPLATE = f"{WORKFLOW_NAME}-template"
+
 cron_workflow = CronWorkflow(
-    name="hello-world-etl",
+    name=WORKFLOW_NAME,
     on_exit="exit-handler",
-    entrypoint="hello-dag",
+    entrypoint="main-dag",
+    timezone="UTC",
+    concurrency_policy="Forbid",
     schedule="*/2 * * * *",
-    workflow_template_ref=WorkflowTemplateRef(name="hello-world-dag-template"),
+    workflow_template_ref=WorkflowTemplateRef(name=WORKFLOW_NAME_TEMPLATE),
     workflows_service=WorkflowService()
 )
 # Create a workflow template with the DAG definition
 with WorkflowTemplate(
-    name="hello-world-dag-template",
-    entrypoint="hello-dag",
+    name=WORKFLOW_NAME_TEMPLATE,
+    entrypoint="main-dag",
 ) as workflow_template:
     with Steps(name="exit-handler") as exit_handler:
         notify(
             name="exit-handler",
             when="{{workflow.status}} != Succeeded"
         )
-    with DAG(name="hello-dag"):
-        A = task(name="A", arguments={"message": "A"})
-        B = task(name="B", arguments={"message": "B"})
-        C = task(name="C", arguments={"message": "C"})
-        D = task(name="D", arguments={"message": "D"})
-        A >> [B, C] >> D  # type: ignore
+    with DAG(name="main-dag"):
+        t1 = monitor_external_workflow(name="external-sensor", arguments={
+            "cron_workflow": "daily-dag",
+            "host": "http://argo-server.argo.svc.cluster.local:2746",
+            "namespace": "argo",
+            "poll_interval": 10,
+            "wait_timeout": 3600,
+            "max_schedule_lag": 300
+        })
+        t2 = task(name="end", arguments={"message": "Finish Task"})
+        t1 >> t2  # type: ignore
     workflow_template.on_exit = exit_handler
     # Compile to workflowtemplate YAML and submit to argo workflow
     print(workflow_template.to_yaml())
