@@ -24,6 +24,8 @@ cron_workflow = CronWorkflow(
     name=WORKFLOW_NAME,
     on_exit="exit-handler",
     entrypoint="main-dag",
+    timezone="UTC",
+    concurrency_policy="Forbid",
     schedule="*/2 * * * *",
     workflow_template_ref=WorkflowTemplateRef(name=WORKFLOW_NAME_TEMPLATE),
     workflows_service=WorkflowService()
@@ -42,7 +44,10 @@ with WorkflowTemplate(
         t1 = monitor_external_workflow(name="external-sensor", arguments={
             "cron_workflow": "daily-dag",
             "host": "http://argo-server.argo.svc.cluster.local:2746",
-            "namespace": "argo"
+            "namespace": "argo",
+            "poll_interval": 10,
+            "wait_timeout": 3600,
+            "max_schedule_lag": 300
         })
         t2 = task(name="end", arguments={"message": "Finish Task"})
         t1 >> t2  # type: ignore
